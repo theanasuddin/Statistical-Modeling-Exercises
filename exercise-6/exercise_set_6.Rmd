@@ -1,0 +1,137 @@
+---
+title: "Exercise Set 6"
+output: html_notebook
+---
+
+## Problem 1
+
+Alone
+
+## Problem 2
+
+LLM (ChatGPT) is used to: + explain the variables in Kaplan-Meier formula for problem 4
+
+## Problem 3
+
+```{r}
+data <- read.table("fourier_regression_data.csv", header = TRUE, sep = ",")
+# head(data)
+
+t = data$x
+y = data$y
+
+fourier_design <- function(t, K, Tper) {
+  X <- cbind(Intercept = rep(1, length(t)))
+  for (k in 1:K) {
+      X <- cbind(X, cos(2*pi*k*t/Tper), sin(2*pi*k*t/Tper))  
+      colnames(X)[ncol(X)-1] <- paste0("cos_", k)
+      colnames(X)[ncol(X)]   <- paste0("sin_", k)
+      
+    }
+  return(X)
+}
+
+for (K in 1:5) {
+  X <- fourier_design(t, K, 1)
+  fourier_fit <- lm(y ~ X - 1)
+  print(AIC(fourier_fit))
+}
+
+# K = 2 gives best AIC = 286.2754
+X <- fourier_design(t, 2, 1)
+
+# Plot Data
+matplot(t, X, type="l", lwd=2, col=1:ncol(X), ylab="Basis functions", main="Fourier Basis")
+fourier_fit <- lm(y ~ X - 1)
+
+# Plot fitted regression curve
+newdata <- data.frame(t=seq(0, 1, length.out=length(t)))
+pred <- predict(fourier_fit, newdata=newdata, se.fit=TRUE, interval="prediction")
+plot(newdata$t, pred$fit[,1], type="l", col="blue", lwd=2,
+     xlab="time", ylab="Predicted mean", main="Fourier regression fit")
+lines(newdata$t, pred$fit[,2], lty=2, col="blue", lwd=1)
+lines(newdata$t, pred$fit[,3], lty=2, col="blue", lwd=1)
+```
+
+## Problem 4
+
+Kaplan-Meier estimator:
+
+| t_i | d_i | n_i | S(t_i) = S(t_i-1) . (1 - d_i / n_i) |
+|-----|-----|-----|-------------------------------------|
+| 1   |     |     | 1                                   |
+| 2   | 1   | 5   | 4/5 = 0.8                           |
+| 3   | 0   | 4   | 0.8                                 |
+| 4   | 1   | 3   | 8/15 = 0.53                         |
+| 5   | 1   | 2   | 4/15 = 0.27                         |
+| 6   |     |     | 0.27                                |
+| 7   | 0   | 1   | 0.27                                |
+| 8   |     |     | 0.27                                |
+
+## Problem 5
+
+a)  The plot shows that the new treatment has overall higher survival probability
+
+```{r}
+library(survival)
+library(survminer) # For pretty plots
+
+df <- read.table("survival_exercise.csv", header = TRUE, sep = ",")
+# head(df)
+
+# Fit KM curves
+fit_km <- survfit(Surv(time, status) ~ treatment, data = df)
+
+# Plot
+ggsurvplot(
+  fit_km,
+  data = df,
+  conf.int = TRUE,
+  pval = TRUE,
+  risk.table = TRUE,
+)
+```
+
+b)  
+
+```{r}
+# Cox model
+fit_cox <- coxph(Surv(time, status) ~ treatment + age, data = df)
+summary(fit_cox)
+
+# Test proportional hazards assumption
+cox.zph(fit_cox)
+```
+
+## Problem 6
+
+Using LASSO, only 11 out of 26 features are selected.
+
+```{r}
+df <- read.table("studentmat.txt", header = TRUE)
+# head(df)
+
+library(glmnet)
+
+# Prepare the data
+X <- as.matrix(df[, 1:26]) # Explanatory variables
+y <- df$G3 # Response variable
+
+# Fit the lasso model
+fit_lasso <- cv.glmnet(X, y, family = "gaussian",
+                       alpha = 1,                   # LASSO
+                       nfolds = 10,
+                       standardize = TRUE)
+
+# Get the best lambda
+best_lambda <- fit_lasso$lambda.min
+
+# Fit the final model with the best lambda
+final_model <- glmnet(X, y, family = "gaussian", 
+                      alpha = 1, 
+                      lambda = best_lambda,
+                      standardize = TRUE)
+
+# Get the coefficients
+coef(final_model)
+```
